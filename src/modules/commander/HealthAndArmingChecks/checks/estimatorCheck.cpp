@@ -126,6 +126,8 @@ void EstimatorChecks::checkAndReport(const Context &context, Report &reporter)
 	if (condition_gps_position_was_valid && reporter.failsafeFlags().gps_position_invalid) {
 		gpsNoLongerValid(context, reporter);
 	}
+
+	lowPositionAccuracy(context, reporter, lpos);
 }
 
 void EstimatorChecks::checkEstimatorStatus(const Context &context, Report &reporter,
@@ -666,6 +668,41 @@ void EstimatorChecks::gpsNoLongerValid(const Context &context, Report &reporter)
 
 		events::send(events::ID("check_estimator_gps_lost"), {events::Log::Error, events::LogInternal::Info},
 			     "GPS no longer valid");
+	}
+}
+
+void EstimatorChecks::lowPositionAccuracy(const Context &context, Report &reporter,
+		const vehicle_local_position_s &lpos) const
+{
+	switch (reporter.failsafeFlags().local_position_accuracy_low) {
+	case true:
+
+		// check conditions for re-setting flag
+		if (reporter.failsafeFlags().local_position_invalid || !(_param_com_low_eph.get() > FLT_EPSILON
+				&& lpos.eph > _param_com_low_eph.get())) {
+			reporter.failsafeFlags().local_position_accuracy_low = true;
+		}
+
+		break;
+
+	default:
+
+		// check conditions for setting flag
+		if (context.isArmed() && !reporter.failsafeFlags().local_position_invalid && (_param_com_low_eph.get() > FLT_EPSILON
+				&& lpos.eph > _param_com_low_eph.get())) {
+			reporter.failsafeFlags().local_position_accuracy_low = true;
+			/* EVENT
+			* @description Low position estimate accuracy detected
+			*/
+			events::send(events::ID("check_estimator_low_position_accuracy"), {events::Log::Error, events::LogInternal::Info},
+				     "Local position estimate has low accuracy");
+
+			if (reporter.mavlink_log_pub()) {
+				mavlink_log_warning(reporter.mavlink_log_pub(), "Local position estimate has low accuracy\t");
+			}
+		}
+
+		break;
 	}
 }
 
