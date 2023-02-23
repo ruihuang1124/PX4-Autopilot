@@ -198,9 +198,14 @@ MulticopterRateControl::Run()
 			}
 		}
 
-		// run the rate controller
-		if (_v_control_mode.flag_control_rates_enabled && !_actuators_0_circuit_breaker_enabled) {
+        actuator_controls_s current_actuators{};
 
+		// run the rate controller
+		if (_v_control_mode.flag_control_rates_enabled && !_actuators_0_circuit_breaker_enabled && _actuator_control_sub.update(&current_actuators)) {
+            matrix::Vector3f torque_motor;
+            torque_motor(0) = current_actuators.control[actuator_controls_s::INDEX_ROLL];
+            torque_motor(1) = current_actuators.control[actuator_controls_s::INDEX_PITCH];
+            torque_motor(2) = current_actuators.control[actuator_controls_s::INDEX_YAW];
 			// reset integral if disarmed
 			if (!_v_control_mode.flag_armed || _vehicle_status.vehicle_type != vehicle_status_s::VEHICLE_TYPE_ROTARY_WING) {
 				_rate_control.resetIntegral();
@@ -219,7 +224,11 @@ MulticopterRateControl::Run()
 			}
 
 			// run rate controller
-			const Vector3f att_control = _rate_control.update(rates, _rates_sp, angular_accel, dt, _maybe_landed || _landed);
+//			const Vector3f att_control = _rate_control.update(rates, _rates_sp, angular_accel, dt, _maybe_landed || _landed);
+            const Vector3f att_control = _rate_control.updateDisturbanceRejectionTorques(rates, _rates_sp,
+                                                                                         angular_accel, dt,
+                                                                                         _maybe_landed || _landed,
+                                                                                         torque_motor);
 
 			// publish rate controller status
 			rate_ctrl_status_s rate_ctrl_status{};
