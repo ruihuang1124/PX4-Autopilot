@@ -121,6 +121,7 @@ Vector3f RateControl::updateDisturbanceRejectionTorques(const matrix::Vector3f &
             if (!landed) {
                 updateIntegral(rate_error, dt);
             }
+            PX4_INFO("calcualted commanded are:%f, %f, %f",double(torque_att_ctrl(0)), double(torque_att_ctrl(1)), double(torque_att_ctrl(2)));
             return torque_att_ctrl;
         }
     }
