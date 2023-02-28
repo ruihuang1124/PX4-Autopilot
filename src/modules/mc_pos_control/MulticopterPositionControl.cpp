@@ -417,28 +417,56 @@ void MulticopterPositionControl::Run()
 
 			_control.setState(states);
 
+            actuator_controls_s current_actuators{};
+            _actuator_control_sub.update(&current_actuators);
+            float current_thrust_from_actuator = current_actuators.control[actuator_controls_s::INDEX_THROTTLE];
+            PX4_INFO("current_thrust from actuator is:%f", double(current_thrust_from_actuator));
+
 			// Run position control
-			if (_control.update(dt)) {
-				_failsafe_land_hysteresis.set_state_and_update(false, time_stamp_now);
+//			if (_control.update(dt)) {
+//				_failsafe_land_hysteresis.set_state_and_update(false, time_stamp_now);
+//
+//			} else {
+//				// Failsafe
+//				if ((time_stamp_now - _last_warn) > 2_s && _last_warn > 0) {
+//					PX4_WARN("invalid setpoints");
+//					_last_warn = time_stamp_now;
+//				}
+//
+//				vehicle_local_position_setpoint_s failsafe_setpoint{};
+//
+//				failsafe(time_stamp_now, failsafe_setpoint, states, !was_in_failsafe);
+//
+//				// reset constraints
+//				_vehicle_constraints = {0, NAN, NAN, NAN, false, {}};
+//
+//				_control.setInputSetpoint(failsafe_setpoint);
+//				_control.setVelocityLimits(_param_mpc_xy_vel_max.get(), _param_mpc_z_vel_max_up.get(), _param_mpc_z_vel_max_dn.get());
+//				_control.update(dt);
+//			}
 
-			} else {
-				// Failsafe
-				if ((time_stamp_now - _last_warn) > 2_s && _last_warn > 0) {
-					PX4_WARN("invalid setpoints");
-					_last_warn = time_stamp_now;
-				}
+            // Position Control with thrust compensation for disturbance rejection.
+            if (_control.updateWithDisturbanceRejection(dt,current_thrust_from_actuator)) {
+                _failsafe_land_hysteresis.set_state_and_update(false, time_stamp_now);
 
-				vehicle_local_position_setpoint_s failsafe_setpoint{};
+            } else {
+                // Failsafe
+                if ((time_stamp_now - _last_warn) > 2_s && _last_warn > 0) {
+                    PX4_WARN("invalid setpoints");
+                    _last_warn = time_stamp_now;
+                }
 
-				failsafe(time_stamp_now, failsafe_setpoint, states, !was_in_failsafe);
+                vehicle_local_position_setpoint_s failsafe_setpoint{};
 
-				// reset constraints
-				_vehicle_constraints = {0, NAN, NAN, NAN, false, {}};
+                failsafe(time_stamp_now, failsafe_setpoint, states, !was_in_failsafe);
 
-				_control.setInputSetpoint(failsafe_setpoint);
-				_control.setVelocityLimits(_param_mpc_xy_vel_max.get(), _param_mpc_z_vel_max_up.get(), _param_mpc_z_vel_max_dn.get());
-				_control.update(dt);
-			}
+                // reset constraints
+                _vehicle_constraints = {0, NAN, NAN, NAN, false, {}};
+
+                _control.setInputSetpoint(failsafe_setpoint);
+                _control.setVelocityLimits(_param_mpc_xy_vel_max.get(), _param_mpc_z_vel_max_up.get(), _param_mpc_z_vel_max_dn.get());
+                _control.updateWithDisturbanceRejection(dt,current_thrust_from_actuator);
+            }
 
 			// Publish internal position control setpoints
 			// on top of the input/feed-forward setpoints these containt the PID corrections
