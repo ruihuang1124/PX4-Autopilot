@@ -75,7 +75,7 @@ class PositionControl
 {
 public:
 
-	PositionControl() = default;
+	PositionControl();
 	~PositionControl() = default;
 
 	/**
@@ -150,9 +150,19 @@ public:
 	 */
 	bool update(const float dt);
 
-    bool updateWithDisturbanceRejection(const float dt, float current_thrust);
+    bool updateWithDisturbanceRejection(const float dt);
 
     void setMaxMotorThrust(float max_motor_thrust);
+
+    void setPWMLimits(int32_t pwm_min_value, int32_t pwm_max_value);
+
+    void setBatteryVoltageFiltered(float battery_voltage_filtered);
+
+    void setCurrentThrottle(float current_throttle);
+
+    void setCurrentAttitude(float attitude_quatenion[4]);
+
+    void setMotorValue(float motor_value[4]);
 
 	/**
 	 * Set the integral term in xy to 0.
@@ -180,10 +190,11 @@ private:
 	bool _updateSuccessful();
 
 	void _positionControl(); ///< Position proportional control
-	void _velocityControl(const float dt, float current_thrust = 0.0); ///< Velocity PID control
-	void _accelerationControl(const float dt, float current_thrust = 0.0); ///< Acceleration setpoint processing
+	void _velocityControl(const float dt); ///< Velocity PID control
+	void _accelerationControl(const float dt); ///< Acceleration setpoint processing
 
-    void calculateDisturbanceRejectionThrust(matrix::Vector3f &thr_sp, float current_thrust, const float dt);
+    void calculateDisturbanceRejectionThrust(matrix::Vector3f &thr_sp, const float dt);
+    void calculateDisturbanceRejectionThrustTest(matrix::Vector3f &thr_sp, const float dt);
 
     void estimateUpdate(float x, const float dt, float &x1, float &x2);
 
@@ -191,9 +202,22 @@ private:
 
     void estimatorUpdateThreeOrder(float x, const float dt, float &x1, float &x2, float &x3);
 
-    void estimateModelThreeOrder(float &pos, float &x1, float &x2, float &x3, float &x1_dot, float &x2_dot, float &x3_dot);
+    void estimatorUpdateThreeOrderVector(matrix::Vector3f x, const float dt, matrix::Vector3f &x1, matrix::Vector3f &x2,
+                                         matrix::Vector3f &x3);
 
-    float thrustNormalization(float actual_thrust);
+    void
+    estimateModelThreeOrder(float &pos, float &x1, float &x2, float &x3, float &x1_dot, float &x2_dot, float &x3_dot);
+
+    void estimateModelThreeOrderVector(matrix::Vector3f &pos, matrix::Vector3f &x1, matrix::Vector3f &x2,
+                                       matrix::Vector3f &x3, matrix::Vector3f &x1_dot,
+                                       matrix::Vector3f &x2_dot,
+                                       matrix::Vector3f &x3_dot);
+
+    float thrustToThrottle(float actual_thrust);
+
+    matrix::Vector3f calculateActualThrustFromMotor();
+    void calculateOneMotorMaxThrust();
+    float thrustToNormalizedInput(float &thrust);
 
 	// Gains
 	matrix::Vector3f _gain_pos_p; ///< Position control proportional gain
@@ -228,22 +252,29 @@ private:
 
     float 	_omega_att = 50.0f;
     float	_zeta_att = 0.7f;
-    float  _mass = 1.85f;
+    float  _mass = 1.5f;
     float 	_x1 = 0.0f;		// vel_hat / pos_hat for z
     float 	_x2 = 0.0f;		// estimate of velocity for z
     float 	_x3 = 0.0f;		// acceleration hat for z
-    float 	_omega_vel = 20.0f;
-    float	_zeta_vel  = 0.7f;
     float	_omega_pos1 = 50.0f;
     float	_omega_pos2 = 20.0f;
-    float	_zeta_pos  = 0.9f;
-    float	_mav_mass  = 0.703f;
-    float	_thrust_factor = 0.4785f;
+    float	_zeta_pos  = 0.7f;
     bool _ndrc_pos_enable{true};
-    float max_motor_thrust_{100.0};
-    float thrust_motor_hat_normalized_ = 0.0f;
-    float thrust_motor_dot_hat_normalized_ = 0.0f;
-    float thrust_motor_dot_dot_hat_normalized_ = 0.0f;
-    float thrust_disturbance_normalized_ = 0.0f;
-
+    float all_motor_max_thrust_{100.0};
+    float throttle_motor_hat_ = 0.0f;
+    float throttle_motor_dot_hat_ = 0.0f;
+    float throttle_motor_dot_dot_hat_ = 0.0f;
+    float throttle_disturbance_ = 0.0f;
+    int32_t pwm_min_value_=0, pwm_max_value_=0;
+    float current_actuator_output_[4];
+    float current_throttle_ = 0.0f;
+    float battery_voltage_filtered_=0.0f;
+    float one_motor_max_thrust_ = 0.0f;
+    float thrust_factor_ = 0.4f;
+    matrix::Dcmf robot_attitude_rotation_matrix_;			/**< rotation matrix from attitude quaternions */
+    matrix::Vector3f thrust_motor_hat_;
+    matrix::Vector3f thrust_motor_dot_hat_;
+    matrix::Vector3f thrust_motor_dot_dot_hat_;
+    float thrust_disturbance_ = 0.0f;
+    matrix::Vector3f _x1_vector, _x2_vector, _x3_vector;
 };

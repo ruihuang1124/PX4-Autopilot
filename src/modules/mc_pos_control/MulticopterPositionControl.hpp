@@ -65,6 +65,11 @@
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
 #include <uORB/topics/actuator_controls.h>
+#include <uORB/topics/actuator_outputs.h>
+#include <uORB/topics/battery_status.h>
+#include <uORB/topics/vehicle_attitude.h>
+#include <uORB/topics/vehicle_attitude_setpoint.h>
+
 
 using namespace time_literals;
 
@@ -107,6 +112,10 @@ private:
 	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
 	uORB::Subscription _vehicle_constraints_sub{ORB_ID(vehicle_constraints)};
     uORB::Subscription _actuator_control_sub{ORB_ID(actuator_controls_0)};
+    uORB::Subscription _actuator_output_sub{ORB_ID(actuator_outputs)};
+    uORB::Subscription _battery_status_sub{ORB_ID(battery_status)};
+    uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
+
 
 	hrt_abstime	_time_stamp_last_loop{0};		/**< time stamp of last loop iteration */
 
@@ -174,7 +183,9 @@ private:
 		(ParamFloat<px4::params::MPC_MAN_Y_TAU>) _param_mpc_man_y_tau,
 
 		(ParamFloat<px4::params::MPC_XY_VEL_ALL>) _param_mpc_xy_vel_all,
-		(ParamFloat<px4::params::MPC_Z_VEL_ALL>) _param_mpc_z_vel_all
+		(ParamFloat<px4::params::MPC_Z_VEL_ALL>) _param_mpc_z_vel_all,
+        (ParamInt<px4::params::PWM_MAIN_MIN>) _pwm_min,
+        (ParamInt<px4::params::PWM_MAIN_MAX>) _pwm_max
 	);
 
 	control::BlockDerivative _vel_x_deriv; /**< velocity derivative in x */

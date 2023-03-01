@@ -82,6 +82,11 @@ MulticopterRateControl::parameters_updated()
 		rate_k.emult(Vector3f(_param_mc_rollrate_i.get(), _param_mc_pitchrate_i.get(), _param_mc_yawrate_i.get())),
 		rate_k.emult(Vector3f(_param_mc_rollrate_d.get(), _param_mc_pitchrate_d.get(), _param_mc_yawrate_d.get())));
 
+//    _rate_control.setGains(
+//            rate_k.emult(Vector3f(10.0f, 10.0f, 10.0f)),
+//            rate_k.emult(Vector3f(0.1f, 0.1f, 0.1f)),
+//            rate_k.emult(Vector3f(0.3f, 0.3f, 0.3f)));
+
 	_rate_control.setIntegratorLimit(
 		Vector3f(_param_mc_rr_int_lim.get(), _param_mc_pr_int_lim.get(), _param_mc_yr_int_lim.get()));
 
@@ -198,6 +203,25 @@ MulticopterRateControl::Run()
 			}
 		}
 
+        actuator_outputs_s actuator_outputs{};		/**< actuator outputs to motors */
+        _actuator_output_sub.update(&actuator_outputs);
+        int32_t pwm_min_value = _pwm_min.get();
+        int32_t pwm_max_value = _pwm_max.get();
+        _rate_control.setPWMLimits(pwm_min_value,pwm_max_value);
+        float actuator_output_value[4];
+        for (int i = 0; i < 4; ++i) {
+            actuator_output_value[i] = actuator_outputs.output[i];
+        }
+        _rate_control.setMotorValue(actuator_output_value);
+        battery_status_s battery_status_test {};
+        _battery_status_sub.update(&battery_status_test);
+//            float battery_voltage = battery_status.voltage_filtered_v;
+        _rate_control.setBatteryVoltageFiltered(battery_status_test.voltage_filtered_v);
+        vehicle_attitude_s	vehicle_attitude;			/**< vehicle attitude */
+        _vehicle_attitude_sub.update(&vehicle_attitude);
+        _rate_control.setCurrentAttitude(vehicle_attitude.q);
+
+
         actuator_controls_s current_actuators{};
 
 		// run the rate controller
@@ -225,12 +249,15 @@ MulticopterRateControl::Run()
 				}
 			}
 
+            vehicle_local_position_s local_pos;
+            _local_pos_sub.update(&local_pos);
+//            PX4_INFO("current_position_z is: %4f",double(local_pos.z));
 			// run rate controller
 //			const Vector3f att_control = _rate_control.update(rates, _rates_sp, angular_accel, dt, _maybe_landed || _landed);
-            const Vector3f att_control = _rate_control.updateDisturbanceRejectionTorques(rates, _rates_sp,
+            const Vector3f att_control = _rate_control.updateDisturbanceRejectionTorquesTest(rates, _rates_sp,
                                                                                          angular_accel, dt,
                                                                                          _maybe_landed || _landed,
-                                                                                         torque_motor);
+                                                                                         torque_motor,-local_pos.z);
 
             // publish rate controller status
 			rate_ctrl_status_s rate_ctrl_status{};
