@@ -156,6 +156,10 @@ public:
 	 */
 	bool update(const float dt);
 
+    bool updateWithDisturbanceRejection(const float dt, float current_thrust);
+
+    void setMaxMotorThrust(float max_motor_thrust);
+
 	/**
 	 * Set the integral term in xy to 0.
 	 * @see _vel_int
@@ -182,8 +186,20 @@ private:
 	bool _inputValid();
 
 	void _positionControl(); ///< Position proportional control
-	void _velocityControl(const float dt); ///< Velocity PID control
-	void _accelerationControl(); ///< Acceleration setpoint processing
+    void _velocityControl(const float dt, float current_thrust = 0.0); ///< Velocity PID control
+    void _accelerationControl(const float dt, float current_thrust = 0.0); ///< Acceleration setpoint processing
+
+    void calculateDisturbanceRejectionThrust(matrix::Vector3f &thr_sp, float current_thrust, const float dt);
+
+    void estimateUpdate(float x, const float dt, float &x1, float &x2);
+
+    void estimatorModel(float &rates, float &x1, float &x2, float &x1_dot, float &x2_dot);
+
+    void estimatorUpdateThreeOrder(float x, const float dt, float &x1, float &x2, float &x3);
+
+    void estimateModelThreeOrder(float &pos, float &x1, float &x2, float &x3, float &x1_dot, float &x2_dot, float &x3_dot);
+
+    float thrustNormalization(float actual_thrust);
 
 	// Gains
 	matrix::Vector3f _gain_pos_p; ///< Position control proportional gain
@@ -216,4 +232,21 @@ private:
 	matrix::Vector3f _thr_sp; /**< desired thrust */
 	float _yaw_sp{}; /**< desired heading */
 	float _yawspeed_sp{}; /** desired yaw-speed */
+
+
+    float 	_omega_att = 50.0f;
+    float	_zeta_att = 0.7f;
+    float  _mass = 1.0f;
+    float 	_x1 = 0.0f;		// vel_hat / pos_hat for z
+    float 	_x2 = 0.0f;		// estimate of velocity for z
+    float 	_x3 = 0.0f;		// acceleration hat for z
+    float 	_omega_vel = 20.0f;
+    float	_zeta_vel  = 0.7f;
+    float	_omega_pos1 = 50.0f;
+    float	_omega_pos2 = 20.0f;
+    float	_zeta_pos  = 0.9f;
+    float	_mav_mass  = 0.703f;
+    float	_thrust_factor = 0.4785f;
+    bool _ndrc_pos_enable{true};
+    float max_motor_thrust_{70.0};
 };

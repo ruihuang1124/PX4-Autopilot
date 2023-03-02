@@ -102,6 +102,10 @@ void PositionControl::setInputSetpoint(const vehicle_local_position_setpoint_s &
 	_yawspeed_sp = setpoint.yawspeed;
 }
 
+void PositionControl::setMaxMotorThrust(float max_motor_thrust) {
+    max_motor_thrust_ = max_motor_thrust;
+}
+
 bool PositionControl::update(const float dt)
 {
 	bool valid = _inputValid();
@@ -121,10 +125,29 @@ bool PositionControl::update(const float dt)
 	return valid;
 }
 
+bool PositionControl::updateWithDisturbanceRejection(const float dt, float current_thrust) {
+    bool valid = _inputValid();
+
+    if (valid) {
+        _positionControl();
+        _velocityControl(dt, current_thrust);
+
+        _yawspeed_sp = PX4_ISFINITE(_yawspeed_sp) ? _yawspeed_sp : 0.f;
+        _yaw_sp = PX4_ISFINITE(_yaw_sp) ? _yaw_sp : _yaw; // TODO: better way to disable yaw control
+    }
+
+    // There has to be a valid output accleration and thrust setpoint otherwise something went wrong
+    valid = valid && PX4_ISFINITE(_acc_sp(0)) && PX4_ISFINITE(_acc_sp(1)) && PX4_ISFINITE(_acc_sp(2));
+    valid = valid && PX4_ISFINITE(_thr_sp(0)) && PX4_ISFINITE(_thr_sp(1)) && PX4_ISFINITE(_thr_sp(2));
+
+    return valid;
+}
+
 void PositionControl::_positionControl()
 {
 	// P-position controller
 	Vector3f vel_sp_position = (_pos_sp - _pos).emult(_gain_pos_p);
+    PX4_INFO("current position z is:%f", double(_pos(2)));
 	// Position and feed-forward velocity setpoints or position states being NAN results in them not having an influence
 	ControlMath::addIfNotNanVector3f(_vel_sp, vel_sp_position);
 	// make sure there are no NAN elements for further reference while constraining
@@ -137,7 +160,7 @@ void PositionControl::_positionControl()
 	_vel_sp(2) = math::constrain(_vel_sp(2), -_lim_vel_up, _lim_vel_down);
 }
 
-void PositionControl::_velocityControl(const float dt)
+void PositionControl::_velocityControl(const float dt, float current_thrust)
 {
 	// PID velocity control
 	Vector3f vel_error = _vel_sp - _vel;
@@ -146,7 +169,7 @@ void PositionControl::_velocityControl(const float dt)
 	// No control input from setpoints or corresponding states which are NAN
 	ControlMath::addIfNotNanVector3f(_acc_sp, acc_sp_velocity);
 
-	_accelerationControl();
+    _accelerationControl(dt,current_thrust);
 
 	// Integrator anti-windup in vertical direction
 	if ((_thr_sp(2) >= -_lim_thr_min && vel_error(2) >= 0.0f) ||
@@ -194,7 +217,7 @@ void PositionControl::_velocityControl(const float dt)
 	_vel_int(2) = math::min(fabsf(_vel_int(2)), CONSTANTS_ONE_G) * sign(_vel_int(2));
 }
 
-void PositionControl::_accelerationControl()
+void PositionControl::_accelerationControl(const float dt, float current_thrust)
 {
 	// Assume standard acceleration due to gravity in vertical direction for attitude generation
 	Vector3f body_z = Vector3f(-_acc_sp(0), -_acc_sp(1), CONSTANTS_ONE_G).normalized();
@@ -205,6 +228,100 @@ void PositionControl::_accelerationControl()
 	collective_thrust /= (Vector3f(0, 0, 1).dot(body_z));
 	collective_thrust = math::min(collective_thrust, -_lim_thr_min);
 	_thr_sp = body_z * collective_thrust;
+    // Update thrust with disturbance rejection
+    if (_ndrc_pos_enable){
+        calculateDisturbanceRejectionThrust(_thr_sp, current_thrust, dt);
+    }
+}
+
+void
+PositionControl::calculateDisturbanceRejectionThrust(matrix::Vector3f &thr_sp, float current_thrust, const float dt) {
+
+    estimatorUpdateThreeOrder(_pos(2), dt, _x1, _x2, _x3);
+    float thrust_hat = _mass * (-_x3 - CONSTANTS_ONE_G);
+    float thrust_hat_normalized = thrustNormalization(thrust_hat);//
+    float thrust_motor_hat_normalized = 0.0f, thrust_motor_dot_hat_normalized = 0.0f, thrust_motor_dot_dot_hat_normalized = 0.0f, thrust_disturbance_normalized = 0.0f;
+    estimatorUpdateThreeOrder(current_thrust, dt, thrust_motor_hat_normalized, thrust_motor_dot_hat_normalized,
+                              thrust_motor_dot_dot_hat_normalized);
+//    estimateUpdate(current_thrust, dt, thrust_motor_hat, thrust_motor_dot_hat);
+    thrust_disturbance_normalized = thrust_hat_normalized - thrust_motor_hat_normalized;
+    PX4_INFO("thrust_hat is:%f", double(thrust_hat));
+    PX4_INFO("thrust_hat normalized is:%f", double(thrust_hat_normalized));
+    PX4_INFO("thrust_motor_hat normalized is:%f", double(thrust_motor_hat_normalized));
+    PX4_INFO("thrust_disturbance_normalized = thrust_hat_normalized - thrust_motor_hat_normalized is:%f", double(thrust_disturbance_normalized));
+    _thr_sp(2) = thr_sp(2) - thrust_disturbance_normalized;
+}
+
+float PositionControl::thrustNormalization(float actual_thrust) {
+    return actual_thrust / max_motor_thrust_;
+}
+
+void PositionControl::estimateUpdate(float x, const float dt, float &x1,
+                                     float &x2) {
+    float x1_dot_1, x2_dot_1, x1_dot_2, x2_dot_2, x1_dot_3, x2_dot_3, x1_dot_4, x2_dot_4;
+    float x1_tmp, x2_tmp;
+
+    x1_tmp = x1;	// x1: estimate of x
+    x2_tmp = x2;	// x2: estimate of x' acceleration
+    estimatorModel(x, x1_tmp, x2_tmp, x1_dot_1, x2_dot_1);
+
+    x1_tmp = x1 + x1_dot_1 * dt/2.0f;
+    x2_tmp = x2 + x2_dot_1 * dt/2.0f;
+    estimatorModel(x, x1_tmp, x2_tmp, x1_dot_2, x2_dot_2);
+
+    x1_tmp = x1 + x1_dot_2 * dt/2.0f;
+    x2_tmp = x2 + x2_dot_2 * dt/2.0f;
+    estimatorModel(x, x1_tmp, x2_tmp, x1_dot_3, x2_dot_3);
+
+    x1_tmp = x1 + x1_dot_3 * dt;
+    x2_tmp = x2 + x2_dot_3 * dt;
+    estimatorModel(x, x1_tmp, x2_tmp, x1_dot_4, x2_dot_4);
+
+    x1 += (x1_dot_1 + x1_dot_2 * 2.0f + x1_dot_3 * 2.0f + x1_dot_4) * dt/6.0f;
+    x2 += (x2_dot_1 + x2_dot_2 * 2.0f + x2_dot_3 * 2.0f + x2_dot_4) * dt/6.0f;
+}
+
+void PositionControl::estimatorUpdateThreeOrder(float x, const float dt, float &x1, float &x2, float &x3) {
+    float x1_dot_1, x2_dot_1, x3_dot_1, x1_dot_2, x2_dot_2, x3_dot_2, x1_dot_3, x2_dot_3, x3_dot_3, x1_dot_4, x2_dot_4, x3_dot_4;
+    float x1_tmp, x2_tmp, x3_tmp;
+    x1_tmp = x1;	// x1: estimate of x
+    x2_tmp = x2;	// x2: estimate of x's acceleration
+    x3_tmp = x3;
+    estimateModelThreeOrder(x, x1_tmp, x2_tmp, x3_tmp, x1_dot_1, x2_dot_1, x3_dot_1);
+
+    x1_tmp = x1 + x1_dot_1 * dt/2.0f;
+    x2_tmp = x2 + x2_dot_1 * dt/2.0f;
+    x3_tmp = x3 + x3_dot_1 * dt/2.0f;
+    estimateModelThreeOrder(x, x1_tmp, x2_tmp, x3_tmp, x1_dot_2, x2_dot_2, x3_dot_2);
+
+    x1_tmp = x1 + x1_dot_2 * dt/2.0f;
+    x2_tmp = x2 + x2_dot_2 * dt/2.0f;
+    x3_tmp = x3 + x3_dot_2 * dt/2.0f;
+    estimateModelThreeOrder(x, x1_tmp, x2_tmp, x3_tmp, x1_dot_3, x2_dot_3, x3_dot_3);
+
+    x1_tmp = x1 + x1_dot_3 * dt;
+    x2_tmp = x2 + x2_dot_3 * dt;
+    x3_tmp = x3 + x3_dot_3 * dt;
+    estimateModelThreeOrder(x, x1_tmp, x2_tmp, x3_tmp, x1_dot_4, x2_dot_4, x3_dot_4);
+
+    x1 += (x1_dot_1 + x1_dot_2 * 2.0f + x1_dot_3 * 2.0f + x1_dot_4) * dt/6.0f;
+    x2 += (x2_dot_1 + x2_dot_2 * 2.0f + x2_dot_3 * 2.0f + x2_dot_4) * dt/6.0f;
+    x3 += (x3_dot_1 + x3_dot_2 * 2.0f + x3_dot_3 * 2.0f + x3_dot_4) * dt/6.0f;
+}
+
+void PositionControl::estimateModelThreeOrder(float &pos, float &x1, float &x2, float &x3, float &x1_dot, float &x2_dot,
+                                              float &x3_dot) {
+    x1_dot = x2;
+    x2_dot = x3;
+    x3_dot = (pos - x1) * _omega_pos2 * _omega_pos2 * _omega_pos1
+             - x2 * (_omega_pos2 * _omega_pos2 + 2.0f * _zeta_pos * _omega_pos1 * _omega_pos2)
+             - x3 * (2.0f * _zeta_pos * _omega_pos2 + _omega_pos1);
+}
+
+void PositionControl::estimatorModel(float &rates, float &x1, float &x2,
+                                     float &x1_dot, float &x2_dot) {
+    x1_dot = x2;
+    x2_dot = (rates - x1) * _omega_att * _omega_att - x2 * 2.0f * _zeta_att * _omega_att;
 }
 
 bool PositionControl::_inputValid()
