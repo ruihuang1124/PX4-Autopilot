@@ -248,28 +248,27 @@ void PositionControl::_accelerationControl(const float dt)
 	_thr_sp = body_z * collective_thrust;
     // Update thrust with disturbance rejection
 //    PX4_INFO("current position z is:%f",double(_pos(2)));
-    if (_ndrc_pos_enable&&_pos(2)<=-0.9f){
-        calculateDisturbanceRejectionThrustTest(_thr_sp, dt);
+    PX4_INFO("desired_throttle is:%f", double(_thr_sp(2)));
+    if (_ndrc_pos_enable){
+        calculateDisturbanceRejectionThrust(_thr_sp, dt);
     }
 }
 
 void
 PositionControl::calculateDisturbanceRejectionThrust(matrix::Vector3f &thr_sp, const float dt) {
-
     estimatorUpdateThreeOrder(_pos(2), dt, _x1, _x2, _x3);
     float thrust_hat = _mass * (_x3 + CONSTANTS_ONE_G);
-//    calculateOneMotorMaxThrust();
-//    setMaxMotorThrust(4*one_motor_max_thrust_);
     float throttle_hat = thrustToThrottle(thrust_hat);
     estimatorUpdateThreeOrder(current_throttle_, dt, throttle_motor_hat_, throttle_motor_dot_hat_,
                               throttle_motor_dot_dot_hat_);
     throttle_disturbance_ = throttle_hat - throttle_motor_hat_;
+    PX4_INFO("desired_throttle is:%f", double(_thr_sp(2)));
     PX4_INFO("current_throttle is:%f", double(current_throttle_));
     PX4_INFO("thrust_hat is:%f", double(thrust_hat));
     PX4_INFO("throttle_hat is:%f", double(throttle_hat));
     PX4_INFO("throttle_motor_hat_ is:%f", double(throttle_motor_hat_));
     PX4_INFO("throttle_disturbance_ = throttle_hat - throttle_motor_hat_ is:%f", double(throttle_disturbance_));
-    _thr_sp(2) = thr_sp(2) - throttle_disturbance_;
+    _thr_sp(2) = _thr_sp(2) - throttle_disturbance_;
 }
 
 void PositionControl::calculateDisturbanceRejectionThrustTest(matrix::Vector3f &thr_sp, const float dt) {

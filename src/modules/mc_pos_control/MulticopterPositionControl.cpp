@@ -438,7 +438,7 @@ void MulticopterPositionControl::Run()
             _actuator_control_sub.update(&current_actuators);
             float current_throttle_from_actuator = current_actuators.control[actuator_controls_s::INDEX_THROTTLE];
             _control.setCurrentThrottle(current_throttle_from_actuator);
-//            PX4_INFO("current_thrust from actuator is:%f", double(current_throttle_from_actuator));
+            PX4_INFO("current_throttle from actuator is:%f", double(current_throttle_from_actuator));
 
 			// Run position control
 //			if (_control.update(dt)) {
