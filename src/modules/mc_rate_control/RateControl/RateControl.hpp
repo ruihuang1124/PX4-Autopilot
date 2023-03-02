@@ -88,6 +88,30 @@ public:
 	matrix::Vector3f update(const matrix::Vector3f &rate, const matrix::Vector3f &rate_sp,
 				const matrix::Vector3f &angular_accel, const float dt, const bool landed);
 
+    /**
+     *
+     * @param rate estimation of the current vehicle angular rate
+     * @param rate_sp desired vehicle angular rate setpoint
+     * @param angular_accel
+     * @param dt desired vehicle angular rate setpoint
+     * @param landed
+     * @return [-1,1] normalized torque vector to apply to the vehicle
+     */
+    matrix::Vector3f updateDisturbanceRejectionTorques(const matrix::Vector3f &rate, const matrix::Vector3f &rate_sp,
+                            const matrix::Vector3f &angular_accel, const float dt, const bool landed, const matrix::Vector3f &current_actuator_command);
+
+    /**
+     *
+     * @param x
+     * @param dt
+     * @param x1
+     * @param x2
+     */
+
+    void estimateUpdate(matrix::Vector3f x, const float dt, matrix::Vector3f &x1, matrix::Vector3f &x2);
+
+    void estimatorModel(matrix::Vector3f &rates, matrix::Vector3f &x1, matrix::Vector3f &x2, matrix::Vector3f &x1_dot, matrix::Vector3f &x2_dot);
+
 	/**
 	 * Set the integral term to 0 to prevent windup
 	 * @see _rate_int
@@ -116,4 +140,15 @@ private:
 	// Feedback from control allocation
 	matrix::Vector<bool, 3> _control_allocator_saturation_negative;
 	matrix::Vector<bool, 3> _control_allocator_saturation_positive;
+    float 	_omega_att = 50.0f;
+    float	_zeta_att = 0.7f;
+    float	_half_length = 0.101f;
+    float	_half_width	 = 0.08f;
+    float	_C_M	= 	0.0097f;
+    float	_I_XX	= 3e-3f;
+    float	_I_YY	= 2.7e-3f;
+    float	_I_ZZ	= 6e-3f;
+    float	_thrust_factor = 0.4785f;
+    bool _ndrc_att_enable{true};
+    bool _ndi_enable{true};
 };
