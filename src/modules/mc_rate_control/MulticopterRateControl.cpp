@@ -216,6 +216,7 @@ MulticopterRateControl::Run()
             torque_motor(0) = current_actuators.control[actuator_controls_s::INDEX_ROLL];
             torque_motor(1) = current_actuators.control[actuator_controls_s::INDEX_PITCH];
             torque_motor(2) = current_actuators.control[actuator_controls_s::INDEX_YAW];
+//            PX4_INFO("torque_motor are: %f, %f, %f", double(torque_motor(0)), double(torque_motor(1)), double(torque_motor(2)));
 
 			// reset integral if disarmed
 			if (!_v_control_mode.flag_armed || _vehicle_status.vehicle_type != vehicle_status_s::VEHICLE_TYPE_ROTARY_WING) {

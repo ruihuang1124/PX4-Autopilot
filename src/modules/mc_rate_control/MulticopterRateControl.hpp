@@ -107,7 +107,7 @@ private:
 	uORB::Subscription _vehicle_angular_acceleration_sub{ORB_ID(vehicle_angular_acceleration)};
 	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
 	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
-    uORB::Subscription _actuator_control_sub{ORB_ID(actuator_controls_2)};
+    uORB::Subscription _actuator_control_sub{ORB_ID(actuator_controls_0)};
 
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 
