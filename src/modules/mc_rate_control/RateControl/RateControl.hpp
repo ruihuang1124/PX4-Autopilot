@@ -161,9 +161,9 @@ private:
 	bool _mixer_saturation_negative[3] {};
     float 	_omega_att = 80.0f;
     float	_zeta_att = 0.8f;
-    float	_I_XX	= 0.019125f;
-    float	_I_YY	= 0.019125f;
-    float	_I_ZZ	= 0.045225f;
+    float	_I_XX	= 0.029125f;
+    float	_I_YY	= 0.029125f;
+    float	_I_ZZ	= 0.055225f;
     matrix::Vector3f rate_hat_, rate_dot_hat_, rate_dot_dot_hat_;
     matrix::Vector3f current_actuator_command_hat_, current_actuator_command_dot_hat_, current_actuator_command_dot_dot_hat_;
     bool _ndrc_att_enable{true};
