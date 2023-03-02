@@ -104,7 +104,7 @@ Vector3f RateControl::updateDisturbanceRejectionTorques(const matrix::Vector3f &
         /* compute gyro moment */
         Vector3f torque_affix = rate.cross(inertia.emult(rate));
         if(!_ndrc_att_enable){
-            Vector3f torque_att_ctrl = inertia.emult(att_ctrl) + torque_affix;
+            Vector3f torque_att_ctrl = att_ctrl + torque_affix;
             // update integral only if we are not landed
             if (!landed) {
                 updateIntegral(rate_error, dt);
@@ -114,7 +114,7 @@ Vector3f RateControl::updateDisturbanceRejectionTorques(const matrix::Vector3f &
             /* Compensate nonlinear gyro moment and disturbed moment */
             Vector3f compen_torque = torque_affix * 1.0f - torque_disturbance * 1.0f;
             /* Convert torque command to normalized input */
-            Vector3f torque_att_ctrl = inertia.emult(att_ctrl) + compen_torque * 1.f;
+            Vector3f torque_att_ctrl = att_ctrl + compen_torque * 1.f;
             if (!landed) {
                 updateIntegral(rate_error, dt);
             }
