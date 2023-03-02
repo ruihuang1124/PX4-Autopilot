@@ -236,7 +236,7 @@ private:
 
     float 	_omega_att = 50.0f;
     float	_zeta_att = 0.7f;
-    float  _mass = 1.0f;
+    float  _mass = 1.85f;
     float 	_x1 = 0.0f;		// vel_hat / pos_hat for z
     float 	_x2 = 0.0f;		// estimate of velocity for z
     float 	_x3 = 0.0f;		// acceleration hat for z
@@ -248,5 +248,9 @@ private:
     float	_mav_mass  = 0.703f;
     float	_thrust_factor = 0.4785f;
     bool _ndrc_pos_enable{true};
-    float max_motor_thrust_{70.0};
+    float max_motor_thrust_{100.0};
+    float thrust_motor_hat_normalized_ = 0.0f;
+    float thrust_motor_dot_hat_normalized_ = 0.0f;
+    float thrust_motor_dot_dot_hat_normalized_ = 0.0f;
+    float thrust_disturbance_normalized_ = 0.0f;
 };

@@ -238,18 +238,21 @@ void
 PositionControl::calculateDisturbanceRejectionThrust(matrix::Vector3f &thr_sp, float current_thrust, const float dt) {
 
     estimatorUpdateThreeOrder(_pos(2), dt, _x1, _x2, _x3);
-    float thrust_hat = _mass * (-_x3 - CONSTANTS_ONE_G);
+    float thrust_hat = _mass * (_x3 + CONSTANTS_ONE_G);
+
     float thrust_hat_normalized = thrustNormalization(thrust_hat);//
-    float thrust_motor_hat_normalized = 0.0f, thrust_motor_dot_hat_normalized = 0.0f, thrust_motor_dot_dot_hat_normalized = 0.0f, thrust_disturbance_normalized = 0.0f;
-    estimatorUpdateThreeOrder(current_thrust, dt, thrust_motor_hat_normalized, thrust_motor_dot_hat_normalized,
-                              thrust_motor_dot_dot_hat_normalized);
-//    estimateUpdate(current_thrust, dt, thrust_motor_hat, thrust_motor_dot_hat);
-    thrust_disturbance_normalized = thrust_hat_normalized - thrust_motor_hat_normalized;
-    PX4_INFO("thrust_hat is:%f", double(thrust_hat));
-    PX4_INFO("thrust_hat normalized is:%f", double(thrust_hat_normalized));
-    PX4_INFO("thrust_motor_hat normalized is:%f", double(thrust_motor_hat_normalized));
-    PX4_INFO("thrust_disturbance_normalized = thrust_hat_normalized - thrust_motor_hat_normalized is:%f", double(thrust_disturbance_normalized));
-    _thr_sp(2) = thr_sp(2) - thrust_disturbance_normalized;
+//    float thrust_disturbance
+//    float thrust_disturbance = thrust_hat - thrust_motor_hat;
+    estimatorUpdateThreeOrder(current_thrust, dt, thrust_motor_hat_normalized_, thrust_motor_dot_hat_normalized_,
+                              thrust_motor_dot_dot_hat_normalized_);
+    thrust_disturbance_normalized_ = thrust_hat_normalized - thrust_motor_hat_normalized_;
+//    thrust_disturbance_normalized_ = thrustNormalization(thrust_disturbance)
+//    PX4_INFO("current_thrust is:%f", double(current_thrust));
+//    PX4_INFO("thrust_hat is:%f", double(thrust_hat));
+//    PX4_INFO("thrust_hat normalized is:%f", double(thrust_hat_normalized));
+//    PX4_INFO("thrust_motor_hat normalized is:%f", double(thrust_motor_hat_normalized_));
+//    PX4_INFO("thrust_disturbance_normalized_ = thrust_hat_normalized - thrust_motor_hat_normalized_ is:%f", double(thrust_disturbance_normalized_));
+    _thr_sp(2) = thr_sp(2) - thrust_disturbance_normalized_;
 }
 
 float PositionControl::thrustNormalization(float actual_thrust) {
