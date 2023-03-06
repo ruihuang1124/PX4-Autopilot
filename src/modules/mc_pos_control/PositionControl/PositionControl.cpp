@@ -46,7 +46,8 @@ using namespace matrix;
 
 PositionControl::PositionControl() {
     for (int i = 0; i < 4; ++i) {
-        current_actuator_output_[i] = 0;
+        current_actuator_output_[i] = 0.0f;
+        current_attitude_quatenion_[i] = 0.0f;
     }
     robot_attitude_rotation_matrix_.identity();
     _x1_vector.setZero();
@@ -55,6 +56,12 @@ PositionControl::PositionControl() {
     thrust_motor_hat_.setZero();
     thrust_motor_dot_hat_.setZero();
     thrust_motor_dot_dot_hat_.setZero();
+    _gain_pos_i.setZero(); ///< Position control proportional gain
+    _gain_pos_i(0) = 0.5f;
+    _gain_pos_i(1) = 0.5f;
+    _gain_pos_i(2) = 0.0f;
+    _gain_pos_d.setZero(); ///< Position control proportional gain
+    _pos_int.setZero();
 }
 
 void PositionControl::setVelocityGains(const Vector3f &P, const Vector3f &I, const Vector3f &D)
@@ -136,6 +143,9 @@ void PositionControl::setCurrentThrottle(float current_throttle) {
 }
 
 void PositionControl::setCurrentAttitude(float attitude_quatenion[4]) {
+    for (int i = 0; i < 4; ++i) {
+        current_attitude_quatenion_[i] = attitude_quatenion[i];
+    }
     robot_attitude_rotation_matrix_ = matrix::Quatf(attitude_quatenion);
 //    PX4_INFO("value of attitude quatenion is[x,y,z,w]:[%f,%f,%f,%f]", double(attitude_quatenion[0]), double(attitude_quatenion[1]), double(attitude_quatenion[2]), double(attitude_quatenion[3]));
 }
@@ -155,7 +165,7 @@ bool PositionControl::update(const float dt)
 	bool valid = _inputValid();
 
 	if (valid) {
-		_positionControl();
+		_positionControl(dt);
 		_velocityControl(dt);
 
 		_yawspeed_sp = PX4_ISFINITE(_yawspeed_sp) ? _yawspeed_sp : 0.f;
@@ -173,7 +183,7 @@ bool PositionControl::updateWithDisturbanceRejection(const float dt) {
     bool valid = _inputValid();
 
     if (valid) {
-        _positionControl();
+        _positionControl(dt);
         _velocityControl(dt);
 
         _yawspeed_sp = PX4_ISFINITE(_yawspeed_sp) ? _yawspeed_sp : 0.f;
@@ -187,21 +197,29 @@ bool PositionControl::updateWithDisturbanceRejection(const float dt) {
     return valid;
 }
 
-void PositionControl::_positionControl()
+void PositionControl::_positionControl(const float dt)
 {
-	// P-position controller
-	Vector3f vel_sp_position = (_pos_sp - _pos).emult(_gain_pos_p);
+//    PX4_INFO("position setpoint is:%f, %f, %f:",double(_pos_sp(0)),double(_pos_sp(1)),double(_pos_sp(2)));
+    // P-position controller
+    Vector3f vel_sp_position;
+    if (_pos(2)<=-0.5f){
+        Vector3f pos_error = _pos_sp - _pos;
+        _pos_int += pos_error.emult(_gain_pos_i) * dt;
+//        PX4_INFO("position error integral:%f, %f, %f:",double(_pos_int(0)),double(_pos_int(1)),double(_pos_int(2)));
+        vel_sp_position = (_pos_sp - _pos).emult(_gain_pos_p) + _pos_int;
+    }else{
+        vel_sp_position = (_pos_sp - _pos).emult(_gain_pos_p);
+    }
+    // Position and feed-forward velocity setpoints or position states being NAN results in them not having an influence
+    ControlMath::addIfNotNanVector3f(_vel_sp, vel_sp_position);
+    // make sure there are no NAN elements for further reference while constraining
+    ControlMath::setZeroIfNanVector3f(vel_sp_position);
 
-	// Position and feed-forward velocity setpoints or position states being NAN results in them not having an influence
-	ControlMath::addIfNotNanVector3f(_vel_sp, vel_sp_position);
-	// make sure there are no NAN elements for further reference while constraining
-	ControlMath::setZeroIfNanVector3f(vel_sp_position);
-
-	// Constrain horizontal velocity by prioritizing the velocity component along the
-	// the desired position setpoint over the feed-forward term.
-	_vel_sp.xy() = ControlMath::constrainXY(vel_sp_position.xy(), (_vel_sp - vel_sp_position).xy(), _lim_vel_horizontal);
-	// Constrain velocity in z-direction.
-	_vel_sp(2) = math::constrain(_vel_sp(2), -_lim_vel_up, _lim_vel_down);
+    // Constrain horizontal velocity by prioritizing the velocity component along the
+    // the desired position setpoint over the feed-forward term.
+    _vel_sp.xy() = ControlMath::constrainXY(vel_sp_position.xy(), (_vel_sp - vel_sp_position).xy(), _lim_vel_horizontal);
+    // Constrain velocity in z-direction.
+    _vel_sp(2) = math::constrain(_vel_sp(2), -_lim_vel_up, _lim_vel_down);
 }
 
 void PositionControl::_velocityControl(const float dt)
@@ -256,8 +274,10 @@ void PositionControl::_velocityControl(const float dt)
 	ControlMath::setZeroIfNanVector3f(vel_error);
 	// Update integral part of velocity control
 	_vel_int += vel_error.emult(_gain_vel_i) * dt;
+    //    PX4_INFO("velocity error integral:%f, %f, %f:",double(_vel_int(0)),double(_vel_int(1)),double(_vel_int(2)));
 
-	// limit thrust integral
+
+    // limit thrust integral
 	_vel_int(2) = math::min(fabsf(_vel_int(2)), CONSTANTS_ONE_G) * sign(_vel_int(2));
 }
 
@@ -274,26 +294,39 @@ void PositionControl::_accelerationControl(const float dt)
 	_thr_sp = body_z * collective_thrust;
     // Update thrust with disturbance rejection
 //    PX4_INFO("current position z is:%f",double(_pos(2)));
-    PX4_INFO("desired_throttle is:%f", double(_thr_sp(2)));
+//    PX4_INFO("desired_throttle is:%f", double(_thr_sp(2)));
+//    estimatorUpdateThreeOrder(_pos(2), dt, _x1, _x2, _x3);
+//    PX4_INFO("acceleration_hat is:%f", double(_x3));
     if (_ndrc_pos_enable){
-        calculateDisturbanceRejectionThrust(_thr_sp, dt);
+        calculateDisturbanceRejectionThrust(dt);
     }
 }
 
-void
-PositionControl::calculateDisturbanceRejectionThrust(matrix::Vector3f &thr_sp, const float dt) {
+void PositionControl::calculateDisturbanceRejectionThrust(const float dt) {
+//    calculateOneMotorMaxThrust();
+//    setMaxMotorThrust(4*one_motor_max_thrust_);
     estimatorUpdateThreeOrder(_pos(2), dt, _x1, _x2, _x3);
-    float thrust_hat = _mass * (_x3 + CONSTANTS_ONE_G);
+//    PX4_INFO("acceleration_hat is:%f", double(_x3));
+//    PX4_INFO("acceleration from px4 is:%f", double(_vel_dot(2)));
+
+//    PX4_INFO("max trust of vehical is:%f", double(all_motor_max_thrust_));
+    float denom = 1.0f - 2.0f * (current_attitude_quatenion_[1] * current_attitude_quatenion_[1] +
+                                 current_attitude_quatenion_[2] * current_attitude_quatenion_[2]);
+
+    float thrust_hat = _mass * (_x3 + CONSTANTS_ONE_G) / denom;
     float throttle_hat = thrustToThrottle(thrust_hat);
     estimatorUpdateThreeOrder(current_throttle_, dt, throttle_motor_hat_, throttle_motor_dot_hat_,
                               throttle_motor_dot_dot_hat_);
     throttle_disturbance_ = throttle_hat - throttle_motor_hat_;
-    PX4_INFO("current_throttle is:%f", double(current_throttle_));
-    PX4_INFO("thrust_hat is:%f", double(thrust_hat));
-    PX4_INFO("throttle_hat is:%f", double(throttle_hat));
-    PX4_INFO("throttle_motor_hat_ is:%f", double(throttle_motor_hat_));
-    PX4_INFO("throttle_disturbance_ = throttle_hat - throttle_motor_hat_ is:%f", double(throttle_disturbance_));
-    _thr_sp(2) = _thr_sp(2) - throttle_disturbance_;
+    float throttle_gravity = thrustToThrottle(_mass*CONSTANTS_ONE_G);
+    float throttle_compensation = math::constrain(throttle_disturbance_,-throttle_gravity,throttle_gravity);
+//    PX4_INFO("desired_throttle is:%f", double(_thr_sp(2)));
+//    PX4_INFO("current_throttle is:%f", double(current_throttle_));
+////    PX4_INFO("thrust_hat is:%f", double(thrust_hat));
+//    PX4_INFO("throttle_hat is:%f", double(throttle_hat));
+//    PX4_INFO("throttle_motor_hat_ is:%f", double(throttle_motor_hat_));
+//    PX4_INFO("throttle_disturbance_ = throttle_hat - throttle_motor_hat_ is:%f", double(throttle_disturbance_));
+    _thr_sp(2) = _thr_sp(2) - throttle_compensation;
 }
 
 void PositionControl::calculateDisturbanceRejectionThrustTest(matrix::Vector3f &thr_sp, const float dt) {

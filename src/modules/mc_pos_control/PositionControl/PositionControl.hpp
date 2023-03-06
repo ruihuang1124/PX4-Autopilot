@@ -195,11 +195,11 @@ public:
 private:
 	bool _inputValid();
 
-	void _positionControl(); ///< Position proportional control
+    void _positionControl(const float dt); ///< Position proportional control
     void _velocityControl(const float dt); ///< Velocity PID control
     void _accelerationControl(const float dt); ///< Acceleration setpoint processing
 
-    void calculateDisturbanceRejectionThrust(matrix::Vector3f &thr_sp, const float dt);
+    void calculateDisturbanceRejectionThrust(const float dt);
     void calculateDisturbanceRejectionThrustTest(matrix::Vector3f &thr_sp, const float dt);
 
     void estimateUpdate(float x, const float dt, float &x1, float &x2);
@@ -227,6 +227,8 @@ private:
 
 	// Gains
 	matrix::Vector3f _gain_pos_p; ///< Position control proportional gain
+    matrix::Vector3f _gain_pos_i; ///< Position control proportional gain
+    matrix::Vector3f _gain_pos_d; ///< Position control proportional gain
 	matrix::Vector3f _gain_vel_p; ///< Velocity control proportional gain
 	matrix::Vector3f _gain_vel_i; ///< Velocity control integral gain
 	matrix::Vector3f _gain_vel_d; ///< Velocity control derivative gain
@@ -247,6 +249,7 @@ private:
 	matrix::Vector3f _vel; /**< current velocity */
 	matrix::Vector3f _vel_dot; /**< velocity derivative (replacement for acceleration estimate) */
 	matrix::Vector3f _vel_int; /**< integral term of the velocity controller */
+    matrix::Vector3f _pos_int; /**< integral term of the position controller */
 	float _yaw{}; /**< current heading */
 
 	// Setpoints
@@ -260,7 +263,7 @@ private:
 
     float 	_omega_att = 50.0f;
     float	_zeta_att = 0.7f;
-    float  _mass = 1.2f;
+    float  _mass = 1.5f;
     float 	_x1 = 0.0f;		// vel_hat / pos_hat for z
     float 	_x2 = 0.0f;		// estimate of velocity for z
     float 	_x3 = 0.0f;		// acceleration hat for z
@@ -268,7 +271,7 @@ private:
     float	_omega_pos2 = 20.0f;
     float	_zeta_pos  = 0.7f;
     bool _ndrc_pos_enable{true};
-    float all_motor_max_thrust_{60.0};
+    float all_motor_max_thrust_ = 60.0f;
     float throttle_motor_hat_ = 0.0f;
     float throttle_motor_dot_hat_ = 0.0f;
     float throttle_motor_dot_dot_hat_ = 0.0f;
@@ -285,4 +288,5 @@ private:
     matrix::Vector3f thrust_motor_dot_dot_hat_;
     float thrust_disturbance_ = 0.0f;
     matrix::Vector3f _x1_vector, _x2_vector, _x3_vector;
+    float current_attitude_quatenion_[4];
 };
