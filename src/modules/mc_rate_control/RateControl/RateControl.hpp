@@ -47,9 +47,18 @@
 class RateControl
 {
 public:
-	RateControl() = default;
+	RateControl();
 	~RateControl() = default;
 
+
+    void setPWMLimits(int32_t pwm_min_value, int32_t pwm_max_value);
+
+    void setBatteryVoltageFiltered(float battery_voltage_filtered);
+
+    void setMotorValue(float motor_value[4]);
+
+    void setCurrentAttitude(float attitude_quatenion[4]);
+    void setMaxMotorThrust(float max_motor_thrust);
 	/**
 	 * Set the rate control gains
 	 * @param P 3D vector of proportional gains for body x,y,z axis
@@ -98,7 +107,10 @@ public:
      * @return [-1,1] normalized torque vector to apply to the vehicle
      */
     matrix::Vector3f updateDisturbanceRejectionTorques(const matrix::Vector3f &rate, const matrix::Vector3f &rate_sp,
-                            const matrix::Vector3f &angular_accel, const float dt, const bool landed, const matrix::Vector3f &current_actuator_command);
+                                                       const matrix::Vector3f &angular_accel, const float dt, const bool landed, const matrix::Vector3f &current_actuator_command, float current_position_z);
+
+    matrix::Vector3f updateDisturbanceRejectionTorquesTest(const matrix::Vector3f &rate, const matrix::Vector3f &rate_sp,
+                                                           const matrix::Vector3f &angular_accel, const float dt, const bool landed, const matrix::Vector3f &current_actuator_command, float current_position_z);
 
     /**
      *
@@ -111,6 +123,10 @@ public:
     void estimateUpdate(matrix::Vector3f x, const float dt, matrix::Vector3f &x1, matrix::Vector3f &x2);
 
     void estimatorModel(matrix::Vector3f &rates, matrix::Vector3f &x1, matrix::Vector3f &x2, matrix::Vector3f &x1_dot, matrix::Vector3f &x2_dot);
+
+    void estimatorUpdateThreeOrder(matrix::Vector3f x, const float dt, matrix::Vector3f &x1, matrix::Vector3f &x2, matrix::Vector3f &x3);
+
+    void estimateModelThreeOrder(matrix::Vector3f &pos, matrix::Vector3f &x1, matrix::Vector3f &x2, matrix::Vector3f &x3, matrix::Vector3f &x1_dot, matrix::Vector3f &x2_dot, matrix::Vector3f &x3_dot);
 
 	/**
 	 * Set the integral term to 0 to prevent windup
@@ -127,6 +143,9 @@ public:
 private:
 	void updateIntegral(matrix::Vector3f &rate_error, const float dt);
 
+    matrix::Vector3f calculateActualTorqueFromMotor();
+    void calculateOneMotorMaxThrust();
+
 	// Gains
 	matrix::Vector3f _gain_p; ///< rate control proportional gain for all axes x, y, z
 	matrix::Vector3f _gain_i; ///< rate control integral gain
@@ -140,15 +159,27 @@ private:
 	// Feedback from control allocation
 	matrix::Vector<bool, 3> _control_allocator_saturation_negative;
 	matrix::Vector<bool, 3> _control_allocator_saturation_positive;
-    float 	_omega_att = 50.0f;
-    float	_zeta_att = 0.7f;
+    float 	_omega_att = 80.0f;
+    float	_zeta_att = 0.8f;
+    float	_I_XX	= 0.019125f;
+    float	_I_YY	= 0.019125f;
+    float	_I_ZZ	= 0.045225f;
+    matrix::Vector3f rate_hat_, rate_dot_hat_, rate_dot_dot_hat_;
+    matrix::Vector3f current_actuator_command_hat_, current_actuator_command_dot_hat_, current_actuator_command_dot_dot_hat_;
+    bool _ndrc_att_enable{true};
+    float	_omega_pos1 = 100.0f;
+    float	_omega_pos2 = 80.0f;
+    float	_zeta_pos  = 0.8f;
+
+    int32_t pwm_min_value_=0, pwm_max_value_=0;
+    float current_actuator_output_[4];
+    matrix::Dcmf robot_attitude_rotation_matrix_;
+    float battery_voltage_filtered_=0.0f;
+    matrix::Vector3f current_actuator_command_;
+    float all_motor_max_thrust_{100.0};
+    float one_motor_max_thrust_ = 0.0f;
     float	_half_length = 0.101f;
     float	_half_width	 = 0.08f;
     float	_C_M	= 	0.0097f;
-    float	_I_XX	= 3e-3f;
-    float	_I_YY	= 2.7e-3f;
-    float	_I_ZZ	= 6e-3f;
-    float	_thrust_factor = 0.4785f;
-    bool _ndrc_att_enable{true};
-    bool _ndi_enable{true};
+    float thrust_factor_ = 0.4f;
 };

@@ -468,10 +468,29 @@ void MulticopterPositionControl::Run()
 
 			_control.setState(states);
 
+            actuator_outputs_s actuator_outputs{};		/**< actuator outputs to motors */
+            _actuator_output_sub.update(&actuator_outputs);
+            int32_t pwm_min_value = _pwm_min.get();
+            int32_t pwm_max_value = _pwm_max.get();
+            _control.setPWMLimits(pwm_min_value,pwm_max_value);
+            float actuator_output_value[4];
+            for (int i = 0; i < 4; ++i) {
+                actuator_output_value[i] = actuator_outputs.output[i];
+            }
+            _control.setMotorValue(actuator_output_value);
+            battery_status_s battery_status {};
+            _battery_status_sub.update(&battery_status);
+//            float battery_voltage = battery_status.voltage_filtered_v;
+            _control.setBatteryVoltageFiltered(battery_status.voltage_filtered_v);
+            vehicle_attitude_s	vehicle_attitude;			/**< vehicle attitude */
+            _vehicle_attitude_sub.update(&vehicle_attitude);
+            _control.setCurrentAttitude(vehicle_attitude.q);
+
             actuator_controls_s current_actuators{};
             _actuator_control_sub.update(&current_actuators);
-            float current_thrust_from_actuator = current_actuators.control[actuator_controls_s::INDEX_THROTTLE];
-            PX4_INFO("current_thrust from actuator is:%f", double(current_thrust_from_actuator));
+            float current_throttle_from_actuator = current_actuators.control[actuator_controls_s::INDEX_THROTTLE];
+            _control.setCurrentThrottle(current_throttle_from_actuator);
+//            PX4_INFO("current_thrust from actuator is:%f", double(current_throttle_from_actuator));
 
             // Run position control
 //			if (_control.update(dt)) {
@@ -497,7 +516,7 @@ void MulticopterPositionControl::Run()
 //			}
 
             // Position Control with thrust compensation for disturbance rejection.
-            if (_control.updateWithDisturbanceRejection(dt,current_thrust_from_actuator)) {
+            if (_control.updateWithDisturbanceRejection(dt)) {
 				_failsafe_land_hysteresis.set_state_and_update(false, time_stamp_now);
 
 			} else {
@@ -519,7 +538,7 @@ void MulticopterPositionControl::Run()
 
 				_control.setInputSetpoint(failsafe_setpoint);
 				_control.setVelocityLimits(_param_mpc_xy_vel_max.get(), _param_mpc_z_vel_max_up.get(), _param_mpc_z_vel_max_dn.get());
-                _control.updateWithDisturbanceRejection(dt,current_thrust_from_actuator);
+                _control.updateWithDisturbanceRejection(dt);
 			}
 
 			// Publish internal position control setpoints
