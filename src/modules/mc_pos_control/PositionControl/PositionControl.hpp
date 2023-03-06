@@ -260,7 +260,7 @@ private:
 
     float 	_omega_att = 50.0f;
     float	_zeta_att = 0.7f;
-    float  _mass = 1.5f;
+    float  _mass = 1.2f;
     float 	_x1 = 0.0f;		// vel_hat / pos_hat for z
     float 	_x2 = 0.0f;		// estimate of velocity for z
     float 	_x3 = 0.0f;		// acceleration hat for z
@@ -268,7 +268,7 @@ private:
     float	_omega_pos2 = 20.0f;
     float	_zeta_pos  = 0.7f;
     bool _ndrc_pos_enable{true};
-    float all_motor_max_thrust_{100.0};
+    float all_motor_max_thrust_{60.0};
     float throttle_motor_hat_ = 0.0f;
     float throttle_motor_dot_hat_ = 0.0f;
     float throttle_motor_dot_dot_hat_ = 0.0f;
